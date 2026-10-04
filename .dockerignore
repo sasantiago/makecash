@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.env
+*.log
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.automaton
+backups

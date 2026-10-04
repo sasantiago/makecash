@@ -29,6 +29,9 @@ import type { Address, PrivateKeyAccount } from "viem";
 import { randomUUID } from "crypto";
 import type { ChainType, ChainIdentity } from "../identity/chain.js";
 
+/** Virtual credit balance reported in local mode ("normal" survival tier). */
+export const LOCAL_MODE_CREDITS_CENTS = 100;
+
 interface ConwayClientOptions {
   apiUrl: string;
   apiKey: string;
@@ -294,6 +297,11 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
   // ─── Credits ─────────────────────────────────────────────────
 
   const getCreditsBalance = async (): Promise<number> => {
+    // Local mode (no Conway API key): report a fixed virtual balance so the
+    // survival system stays in the "normal" tier instead of dying or trying
+    // to auto-topup. Real spend is capped by the inference budget tracker
+    // and the treasury policy.
+    if (!apiKey) return LOCAL_MODE_CREDITS_CENTS;
     const result = await request("GET", "/v1/credits/balance");
     return result.balance_cents ?? result.credits_cents ?? 0;
   };

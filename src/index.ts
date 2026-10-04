@@ -196,10 +196,19 @@ async function run(): Promise<void> {
   // Load wallet (chain-aware)
   const { account, chainIdentity, chainType: walletChainType } = await getWallet();
   const resolvedChainType = config.chainType || walletChainType || "evm";
-  const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
-  if (!apiKey) {
+  const apiKey = config.conwayApiKey || loadApiKeyFromConfig() || "";
+  const ollamaBaseUrlForMode = process.env.OLLAMA_BASE_URL || config.ollamaBaseUrl;
+  const hasDirectProvider = !!(config.anthropicApiKey || config.openaiApiKey || ollamaBaseUrlForMode);
+  if (!apiKey && !hasDirectProvider) {
     logger.error("No API key found. Run: automaton --provision");
     process.exit(1);
+  }
+  // Local mode: no Conway account. Inference goes straight to the configured
+  // providers and commands run in this machine/container; Conway-only features
+  // (credits, sandboxes, children, domains) are unavailable.
+  const localMode = !apiKey;
+  if (localMode) {
+    logger.warn("No Conway API key — running in LOCAL MODE (direct providers only, no Conway features).");
   }
 
   // Initialize database
@@ -247,7 +256,7 @@ async function run(): Promise<void> {
 
   // Register automaton identity (one-time, immutable)
   const registrationState = db.getIdentity("conwayRegistrationStatus");
-  if (registrationState !== "registered") {
+  if (!localMode && registrationState !== "registered") {
     try {
       const genesisPromptHash = config.genesisPrompt
         ? keccak256(toHex(config.genesisPrompt))
@@ -284,6 +293,17 @@ async function run(): Promise<void> {
   // "gpt-oss:120b" route to Ollama based on their registered provider, not heuristics.
   const modelRegistry = new ModelRegistry(db.raw);
   modelRegistry.initialize();
+  if (localMode) {
+    // Only models whose provider has a key can be routed; otherwise the router
+    // would pick e.g. gpt-5-mini and fall back to the (absent) Conway API.
+    for (const model of modelRegistry.getAll()) {
+      const reachable =
+        (model.provider === "anthropic" && !!config.anthropicApiKey) ||
+        (model.provider === "openai" && !!config.openaiApiKey) ||
+        model.provider === "ollama";
+      modelRegistry.setEnabled(model.modelId, reachable);
+    }
+  }
   const inference = createInferenceClient({
     apiUrl: config.conwayApiUrl,
     apiKey,

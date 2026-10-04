@@ -132,6 +132,34 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
     parameterStyle: "max_completion_tokens",
     enabled: true,
   },
+  {
+    modelId: "claude-sonnet-5-5",
+    provider: "anthropic",
+    displayName: "Claude Sonnet 5.5",
+    tierMinimum: "normal",
+    costPer1kInput: 20,    // $2.00/M
+    costPer1kOutput: 100,  // $10.00/M
+    maxTokens: 128000,
+    contextWindow: 1000000,
+    supportsTools: true,
+    supportsVision: true,
+    parameterStyle: "max_tokens",
+    enabled: true,
+  },
+  {
+    modelId: "claude-haiku-4-5-20251001",
+    provider: "anthropic",
+    displayName: "Claude Haiku 4.5",
+    tierMinimum: "critical",
+    costPer1kInput: 10,    // $1.00/M
+    costPer1kOutput: 50,   // $5.00/M
+    maxTokens: 64000,
+    contextWindow: 200000,
+    supportsTools: true,
+    supportsVision: true,
+    parameterStyle: "max_tokens",
+    enabled: true,
+  },
 ];
 
 // === Default Routing Matrix ===
