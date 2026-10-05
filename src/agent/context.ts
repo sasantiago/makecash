@@ -163,8 +163,10 @@ export function buildContextMessages(
       });
     }
 
-    // The agent's thinking as assistant message
-    if (turn.thinking) {
+    // The agent's thinking as assistant message. Tool-only turns count too:
+    // newer models (e.g. Claude Sonnet 5.5) often call tools with no visible
+    // text, and dropping those turns hides every result from the next turn.
+    if (turn.thinking || turn.toolCalls.length > 0) {
       const msg: ChatMessage = {
         role: "assistant",
         content: turn.thinking,
