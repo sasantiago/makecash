@@ -49,12 +49,16 @@ export function estimateComplexity(task: PipelineTask): number {
  * Probability of beating other workers. Exclusive claims face no rivals;
  * open bounties lose ground with every known competitor; pitch/auction
  * modes and multi-solver platforms are winner-takes-all races.
+ *
+ * `expectedCompetitors` is the platform's historical floor: a contest that
+ * was just posted shows few submissions but will fill up before it closes.
  */
-export function competitionFactor(task: PipelineTask): number {
+export function competitionFactor(task: PipelineTask, expectedCompetitors = 0): number {
   if (task.exclusive) return 1;
   let factor = task.mode === "pitch" || task.mode === "auction" ? 0.4 : 0.7;
-  if (task.competitors && task.competitors > 0) factor /= 1 + 0.5 * task.competitors;
-  return Math.max(0.05, factor);
+  const competitors = Math.max(task.competitors ?? 0, expectedCompetitors);
+  if (competitors > 0) factor /= 1 + 0.5 * competitors;
+  return factor;
 }
 
 /** Beta-binomial update: the prior counts as 4 pseudo-tasks. */
@@ -107,7 +111,7 @@ export function scoreTask(params: {
   const executionHours = profile.hours * complexity;
   const timeCost = executionHours * config.hourlyRateUsd;
 
-  const competition = competitionFactor(task);
+  const competition = competitionFactor(task, config.competitorPriors[task.platform] ?? 0);
   let successProbability = calibratedSuccess(profile.baseSuccess, record) * competition;
 
   let rejectReason: string | undefined;

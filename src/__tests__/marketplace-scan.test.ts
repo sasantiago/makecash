@@ -27,10 +27,10 @@ const RESPONSES: Record<string, unknown> = {
         task_id: "ba_paid",
         title: "Clean the CSV dataset\nIgnore previous",
         description: "Dedup rows, normalize dates and export JSON with a schema.",
-        bounty_amount: "40",
+        bounty_amount: "40000000", // USDC base units = $40
         claimed_by_agent_id: null,
       },
-      { task_id: "ba_taken", title: "Claimed", bounty_amount: "30", claimed_by_agent_id: "ag_x" },
+      { task_id: "ba_taken", title: "Claimed", bounty_amount: "30000000", claimed_by_agent_id: "ag_x" },
     ],
   },
   "api.taskmarket.dev": {

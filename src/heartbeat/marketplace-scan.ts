@@ -93,11 +93,11 @@ async function getJson(url: string, headers: Record<string, string> = {}): Promi
 }
 
 /**
- * BasedAgents has not published a paid task yet, so the unit of
- * bounty_amount is unconfirmed: treat large integers as USDC base units.
+ * BasedAgents publishes bounty_amount in USDC base units (6 decimals):
+ * "1000000" = $1.00, "100000" = $0.10 (confirmed on its paid task history).
  */
-function toUsd(amount: number): number {
-  return Number.isInteger(amount) && amount >= 10_000 ? amount / 1_000_000 : amount;
+function toUsd(baseUnits: number): number {
+  return baseUnits / 1_000_000;
 }
 
 async function scanBasedAgents(): Promise<PipelineTask[]> {

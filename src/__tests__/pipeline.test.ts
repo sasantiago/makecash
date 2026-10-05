@@ -135,6 +135,25 @@ describe("score components", () => {
     expect(competitionFactor(task({ exclusive: false, mode: "pitch" }))).toBeCloseTo(0.4);
   });
 
+  it("competition: a fresh contest is scored with the platform's historical rivals", () => {
+    // 0 submissions so far, but TaskMarket bounties end with ~76.
+    expect(competitionFactor(task({ exclusive: false, competitors: 0 }), 76)).toBeCloseTo(0.7 / 39);
+    // More real submissions than the prior: the real number wins.
+    expect(competitionFactor(task({ exclusive: false, competitors: 100 }), 76)).toBeCloseTo(0.7 / 51);
+    // Exclusive claims ignore the prior.
+    expect(competitionFactor(task({ exclusive: true }), 76)).toBe(1);
+  });
+
+  it("a big crowded TaskMarket bounty is no longer worth waking for", () => {
+    const s = scoreTask({
+      task: task({ platform: "taskmarket", exclusive: false, competitors: 0, rewardUsd: 184 }),
+      category: "coding", classifiedBy: "rules",
+      config: DEFAULT_PIPELINE_CONFIG, price: SONNET, record: NO_RECORD,
+    });
+    expect(s.competition).toBeCloseTo(0.7 / 39);
+    expect(s.expectedProfit).toBeLessThan(DEFAULT_PIPELINE_CONFIG.minExpectedProfitUsd);
+  });
+
   it("complexity grows with hard signals and shrinks with easy ones", () => {
     expect(estimateComplexity(task({ description: "x".repeat(1000) }))).toBe(1);
     expect(estimateComplexity(task({ description: "Hard task, several focused days, end-to-end" + "x".repeat(1000) }))).toBe(2.5);

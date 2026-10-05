@@ -79,6 +79,12 @@ export interface PipelineConfig {
   /** Cheap models for classification fallbacks, tried in order. */
   cheapModels: CheapModel[];
   ollamaBaseUrl?: string;
+  /**
+   * Expected rivals on open (non-exclusive) tasks per platform. A fresh
+   * listing shows 0 submissions, but contests fill up later; this floor
+   * comes from the platform's history.
+   */
+  competitorPriors: Record<string, number>;
   profiles: Record<Category, CategoryProfile>;
 }
 
@@ -94,6 +100,9 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
     { model: "gpt-5-mini", provider: "openai" },
   ],
   ollamaBaseUrl: "http://host.docker.internal:11434",
+  // TaskMarket: median of 76 submissions per bounty over 2026-08/10 (191 bounties).
+  // TaskBounty: several solvers race each bug; no public history yet.
+  competitorPriors: { taskmarket: 76, taskbounty: 5 },
   profiles: {
     coding: { inputTokens: 500_000, outputTokens: 40_000, hours: 1.5, baseSuccess: 0.35 },
     data: { inputTokens: 200_000, outputTokens: 25_000, hours: 0.75, baseSuccess: 0.55 },
@@ -107,6 +116,7 @@ export function resolvePipelineConfig(partial?: Partial<PipelineConfig>): Pipeli
   return {
     ...DEFAULT_PIPELINE_CONFIG,
     ...(partial ?? {}),
+    competitorPriors: { ...DEFAULT_PIPELINE_CONFIG.competitorPriors, ...(partial?.competitorPriors ?? {}) },
     profiles: { ...DEFAULT_PIPELINE_CONFIG.profiles, ...(partial?.profiles ?? {}) },
   };
 }
