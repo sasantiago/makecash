@@ -84,7 +84,7 @@ export function createHeartbeatDaemon(
       intervalMs: null,
       enabled: entry.enabled ? 1 : 0,
       priority: 0,
-      timeoutMs: 30_000,
+      timeoutMs: entry.timeoutMs ?? 30_000,
       maxRetries: 1,
       tierMinimum: "dead",
       lastRunAt: entry.lastRun ?? null,

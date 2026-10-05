@@ -23,6 +23,8 @@ import { getMetrics } from "../observability/metrics.js";
 import { AlertEngine, createDefaultAlertRules } from "../observability/alerts.js";
 import { metricsInsertSnapshot, metricsPruneOld } from "../state/database.js";
 import { ulid } from "ulid";
+import { scanMarketplaces } from "./marketplace-scan.js";
+import { dailyReport } from "./daily-report.js";
 
 const logger = createLogger("heartbeat.tasks");
 
@@ -44,6 +46,11 @@ export const COLONY_TASK_INTERVALS_MS = {
 } as const;
 
 export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
+  // Polls marketplace APIs without inference; wakes the agent on new paid work.
+  scan_marketplaces: scanMarketplaces,
+  // Appends a no-inference daily summary to PARA_EL_CREADOR.md.
+  daily_report: dailyReport,
+
   heartbeat_ping: async (ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
     // Use ctx.creditBalance instead of calling conway.getCreditsBalance()
     const credits = ctx.creditBalance;

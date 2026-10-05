@@ -52,6 +52,8 @@ export interface AutomatonConfig {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
+  /** Google Gemini API key (also read from GEMINI_API_KEY). */
+  geminiApiKey?: string;
   inferenceModel: string;
   maxTokensPerTurn: number;
   heartbeatConfigPath: string;
@@ -63,6 +65,8 @@ export interface AutomatonConfig {
   agentId?: string;
   maxChildren: number;
   maxTurnsPerCycle?: number;
+  /** Deterministic task pipeline (classification, scoring, cheap-LLM helpers). */
+  pipeline?: import("./pipeline/types.js").PipelineConfig;
   /** Child sandbox memory config (MB), default 1024 */
   childSandboxMemoryMb?: number;
   parentAddress?: string;
@@ -198,6 +202,8 @@ export interface HeartbeatEntry {
   lastRun?: string;
   nextRun?: string;
   params?: Record<string, unknown>;
+  /** Per-task execution limit; defaults to 30s. */
+  timeoutMs?: number;
 }
 
 export interface HeartbeatConfig {
@@ -1142,7 +1148,7 @@ export const DEFAULT_MEMORY_BUDGET: MemoryBudget = {
 
 // === Phase 2.3: Inference & Model Strategy Types ===
 
-export type ModelProvider = "openai" | "anthropic" | "conway" | "ollama" | "other";
+export type ModelProvider = "openai" | "anthropic" | "conway" | "ollama" | "gemini" | "other";
 
 export type InferenceTaskType =
   | "agent_turn"
@@ -1242,6 +1248,10 @@ export interface ModelStrategyConfig {
   perCallCeilingCents: number; // default: 0 (no limit)
   enableModelFallback: boolean; // default: true
   anthropicApiVersion: string; // default: "2023-06-01"
+  /** Try inferenceModel/lowComputeModel/criticalModel before the routing matrix. */
+  preferConfiguredModels?: boolean; // default: false
+  /** Models tried in order when the selected model's provider errors. */
+  fallbackModels?: string[]; // default: []
 }
 
 export const DEFAULT_MODEL_STRATEGY_CONFIG: ModelStrategyConfig = {

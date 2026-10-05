@@ -198,7 +198,9 @@ async function run(): Promise<void> {
   const resolvedChainType = config.chainType || walletChainType || "evm";
   const apiKey = config.conwayApiKey || loadApiKeyFromConfig() || "";
   const ollamaBaseUrlForMode = process.env.OLLAMA_BASE_URL || config.ollamaBaseUrl;
-  const hasDirectProvider = !!(config.anthropicApiKey || config.openaiApiKey || ollamaBaseUrlForMode);
+  const hasDirectProvider = !!(
+    config.anthropicApiKey || config.openaiApiKey || config.geminiApiKey || ollamaBaseUrlForMode
+  );
   if (!apiKey && !hasDirectProvider) {
     logger.error("No API key found. Run: automaton --provision");
     process.exit(1);
@@ -300,6 +302,7 @@ async function run(): Promise<void> {
       const reachable =
         (model.provider === "anthropic" && !!config.anthropicApiKey) ||
         (model.provider === "openai" && !!config.openaiApiKey) ||
+        (model.provider === "gemini" && !!config.geminiApiKey) ||
         model.provider === "ollama";
       modelRegistry.setEnabled(model.modelId, reachable);
     }
@@ -313,6 +316,7 @@ async function run(): Promise<void> {
     openaiApiKey: config.openaiApiKey,
     anthropicApiKey: config.anthropicApiKey,
     ollamaBaseUrl,
+    geminiApiKey: config.geminiApiKey,
     getModelProvider: (modelId) => modelRegistry.get(modelId)?.provider,
   });
 

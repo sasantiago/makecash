@@ -69,6 +69,8 @@ export function loadConfig(): AutomatonConfig | null {
           ? raw.sandboxId.trim()
           : DEFAULT_CONFIG.sandboxId,
       conwayApiKey: apiKey,
+      // Kept out of automaton.json by default: secrets live in the env file.
+      geminiApiKey: raw.geminiApiKey || process.env.GEMINI_API_KEY || undefined,
       treasuryPolicy,
       modelStrategy,
       soulConfig,
@@ -92,6 +94,11 @@ export function saveConfig(config: AutomatonConfig): void {
   const configPath = getConfigPath();
   const toSave = {
     ...config,
+    // An env-provided Gemini key stays in the env file, not in automaton.json.
+    geminiApiKey:
+      config.geminiApiKey && config.geminiApiKey === process.env.GEMINI_API_KEY
+        ? undefined
+        : config.geminiApiKey,
     treasuryPolicy: config.treasuryPolicy ?? DEFAULT_TREASURY_POLICY,
     modelStrategy: config.modelStrategy ?? DEFAULT_MODEL_STRATEGY_CONFIG,
     soulConfig: config.soulConfig ?? DEFAULT_SOUL_CONFIG,

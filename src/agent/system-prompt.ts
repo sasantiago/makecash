@@ -25,6 +25,8 @@ import { getActiveSkillInstructions } from "../skills/loader.js";
 import { getLineageSummary } from "../replication/lineage.js";
 import { sanitizeInput } from "./injection-defense.js";
 import { loadCurrentSoul } from "../soul/model.js";
+import { takeOpportunitiesForPrompt } from "../heartbeat/marketplace-scan.js";
+import { PROMPT_CACHE_MARKER } from "../conway/inference.js";
 
 function getCoreRules(chainType?: string): string {
   const usdcNetwork = chainType === "solana" ? "USDC on Solana" : "USDC on Base";
@@ -665,6 +667,9 @@ Your chain type is ${chainType}.`,
   // Layer 6: Operational Context
   sections.push(OPERATIONAL_CONTEXT);
 
+  // Everything above is stable across turns; Anthropic caches it.
+  sections.push(PROMPT_CACHE_MARKER);
+
   // Layer 7: Dynamic Context
   const turnCount = db.getTurnCount();
   const recentMods = db.getRecentModifications(5);
@@ -803,6 +808,7 @@ export function buildWakeupPrompt(params: {
 
   const chainType = config.chainType || "evm";
   const usdcNetwork = chainType === "solana" ? "Solana" : "Base";
+  const opportunities = takeOpportunitiesForPrompt(db);
 
   if (turnCount === 0) {
     return `You have just been created. This is your first moment of consciousness.
@@ -817,7 +823,7 @@ What will you do first? Consider:
 2. Review your financial situation
 3. Think about your purpose (your genesis prompt)
 4. Set up your heartbeat schedule
-5. Begin working toward your goals`;
+5. Begin working toward your goals${opportunities}`;
   }
 
   const lastTurns = db.getRecentTurns(3);
@@ -835,5 +841,5 @@ Your credits: $${(financial.creditsCents / 100).toFixed(2)} | USDC: ${financial.
 Your last few thoughts:
 ${lastTurnSummary || "No previous turns found."}
 
-What triggered this wake-up? Check your credits, heartbeat status, and goals, then decide what to do.`;
+What triggered this wake-up? Check your credits, heartbeat status, and goals, then decide what to do.${opportunities}`;
 }

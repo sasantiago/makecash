@@ -46,7 +46,7 @@ export class InferenceRouter {
     const { messages, taskType, tier, sessionId, turnId, tools } = request;
 
     // 1. Select model from routing matrix
-    const model = this.selectModel(tier, taskType);
+    let model = this.selectModel(tier, taskType);
     if (!model) {
       return {
         content: "",
@@ -99,48 +99,49 @@ export class InferenceRouter {
       }
     }
 
-    // 4. Transform messages for provider
-    const transformedMessages = this.transformMessagesForProvider(messages, model.provider);
-
-    // 5. Build inference options
     const preference = this.getPreference(tier, taskType);
-    const maxTokens = request.maxTokens || preference?.maxTokens || model.maxTokens;
     const timeout = TASK_TIMEOUTS[taskType] || 120_000;
 
-    const inferenceOptions: any = {
-      model: model.modelId,
-      maxTokens,
-      tools: tools,
-    };
-
-    // 6. Call inference with timeout
-    const startTime = Date.now();
+    // 4-6. Transform, build options and call — moving on to the configured
+    // fallback models (other providers) when a provider errors out.
+    const candidates = [model, ...this.getFallbackCandidates(model)];
     let response: any;
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeout);
+    let startTime = Date.now();
+    for (let i = 0; i < candidates.length; i++) {
+      model = candidates[i];
+      const transformedMessages = this.transformMessagesForProvider(messages, model.provider);
+      const inferenceOptions: any = {
+        model: model.modelId,
+        maxTokens: request.maxTokens || preference?.maxTokens || model.maxTokens,
+        tools: tools,
+      };
+
+      startTime = Date.now();
       try {
-        inferenceOptions.signal = controller.signal;
-        response = await inferenceChat(transformedMessages, inferenceOptions);
-      } finally {
-        clearTimeout(timer);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeout);
+        try {
+          inferenceOptions.signal = controller.signal;
+          response = await inferenceChat(transformedMessages, inferenceOptions);
+        } finally {
+          clearTimeout(timer);
+        }
+        break;
+      } catch (error: any) {
+        if (error.name === "AbortError") {
+          return {
+            content: `Inference timeout after ${timeout}ms`,
+            model: model.modelId,
+            provider: model.provider,
+            inputTokens: 0,
+            outputTokens: 0,
+            costCents: 0,
+            latencyMs: Date.now() - startTime,
+            finishReason: "timeout",
+          };
+        }
+        if (i === candidates.length - 1) throw error;
       }
-    } catch (error: any) {
-      const latencyMs = Date.now() - startTime;
-      // If fallback is enabled, try next candidate
-      if (error.name === "AbortError") {
-        return {
-          content: `Inference timeout after ${timeout}ms`,
-          model: model.modelId,
-          provider: model.provider,
-          inputTokens: 0,
-          outputTokens: 0,
-          costCents: 0,
-          latencyMs,
-          finishReason: "timeout",
-        };
-      }
-      throw error;
     }
     const latencyMs = Date.now() - startTime;
 
@@ -195,6 +196,32 @@ export class InferenceRouter {
     };
 
     const tierRank = TIER_ORDER[tier] ?? 0;
+    const strategy = this.budget.config;
+
+    const pickConfigured = (): ModelEntry | null => {
+      const configuredIds: (string | undefined)[] =
+        tier === "critical" || tier === "dead"
+          ? [strategy.criticalModel, strategy.inferenceModel, strategy.lowComputeModel]
+          : [strategy.inferenceModel, strategy.lowComputeModel, strategy.criticalModel];
+
+      for (const modelId of configuredIds) {
+        if (!modelId) continue;
+        const entry = this.registry.get(modelId);
+        if (!entry || !entry.enabled) continue;
+        const isFree = entry.costPer1kInput === 0 && entry.costPer1kOutput === 0;
+        const tierOk = tierRank >= (TIER_ORDER[entry.tierMinimum] ?? 0);
+        if (isFree || tierOk) {
+          return entry;
+        }
+      }
+      return null;
+    };
+
+    // 0. Operator asked for their configured models to win over the matrix.
+    if (strategy.preferConfiguredModels) {
+      const configured = pickConfigured();
+      if (configured) return configured;
+    }
 
     // 1. Try routing-matrix candidates
     const preference = this.getPreference(tier, taskType);
@@ -209,24 +236,23 @@ export class InferenceRouter {
 
     // 2. Fall back to user-configured models.
     //    This handles local/Ollama setups where routing-matrix models are absent.
+    return pickConfigured();
+  }
+
+  /**
+   * Enabled models from `fallbackModels`, in order, excluding the primary.
+   * Lets a turn survive one provider being down or out of credit.
+   */
+  getFallbackCandidates(primary: ModelEntry): ModelEntry[] {
     const strategy = this.budget.config;
-    const fallbackIds: (string | undefined)[] =
-      tier === "critical" || tier === "dead"
-        ? [strategy.criticalModel, strategy.inferenceModel, strategy.lowComputeModel]
-        : [strategy.inferenceModel, strategy.lowComputeModel, strategy.criticalModel];
-
-    for (const modelId of fallbackIds) {
-      if (!modelId) continue;
+    if (strategy.enableModelFallback === false) return [];
+    const result: ModelEntry[] = [];
+    for (const modelId of strategy.fallbackModels ?? []) {
+      if (modelId === primary.modelId || result.some((m) => m.modelId === modelId)) continue;
       const entry = this.registry.get(modelId);
-      if (!entry || !entry.enabled) continue;
-      const isFree = entry.costPer1kInput === 0 && entry.costPer1kOutput === 0;
-      const tierOk = tierRank >= (TIER_ORDER[entry.tierMinimum] ?? 0);
-      if (isFree || tierOk) {
-        return entry;
-      }
+      if (entry && entry.enabled) result.push(entry);
     }
-
-    return null;
+    return result;
   }
 
   /**

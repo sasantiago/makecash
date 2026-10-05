@@ -55,6 +55,20 @@ const DEFAULT_HEARTBEAT_CONFIG: HeartbeatConfig = {
       task: "check_social_inbox",
       enabled: true,
     },
+    {
+      name: "scan_marketplaces",
+      schedule: "*/20 * * * *",
+      task: "scan_marketplaces",
+      enabled: true,
+      // Local Ollama may need to load its model before classifying.
+      timeoutMs: 300_000,
+    },
+    {
+      name: "daily_report",
+      schedule: "0 13 * * *", // 13:00 UTC = 08:00 in Colombia (UTC-5)
+      task: "daily_report",
+      enabled: true,
+    },
   ],
   defaultIntervalMs: 60_000,
   lowComputeMultiplier: 4,

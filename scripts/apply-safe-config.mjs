@@ -40,6 +40,27 @@ config.modelStrategy = {
   sessionBudgetCents: 0,
   perCallCeilingCents: 25,  // $0.25 por llamada
   enableModelFallback: true,
+  // Usa siempre los modelos de arriba antes que la matriz de Conway (GPT).
+  preferConfiguredModels: true,
+  // Si el proveedor principal falla, prueba estos en orden. Los que no
+  // tengan key configurada se ignoran solos.
+  fallbackModels: ["gemini-3.8-flash", "gpt-5.2", CHEAP_MODEL],
+};
+
+// Pipeline determinista: clasificación, puntuación y modelos baratos.
+config.pipeline = {
+  ...(config.pipeline ?? {}),
+  minExpectedProfitUsd: 2,
+  hourlyRateUsd: 0.25,
+  workModel: MAIN_MODEL,
+  promptCacheSavings: 0.6,
+  ollamaBaseUrl: "http://host.docker.internal:11434",
+  cheapModels: [
+    { model: "llama3.2:3b", provider: "ollama" },
+    { model: "gemini-3.5-flash-lite", provider: "gemini" },
+    { model: CHEAP_MODEL, provider: "anthropic" },
+    { model: "gpt-5-mini", provider: "openai" },
+  ],
 };
 
 config.treasuryPolicy = {
@@ -60,3 +81,4 @@ fs.writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
 console.log("Configuración conservadora aplicada:");
 console.log(`  modelo principal: ${MAIN_MODEL} | bajo/crítico: ${CHEAP_MODEL}`);
 console.log("  hijos máx: 2 | inferencia máx: $5/día, $1/hora | transferencias máx: $10/día");
+console.log("  respaldo: Gemini 3.8 Flash -> gpt-5.2 (si hay key) -> Haiku | pipeline: EP mínima $2, Ollama -> Gemini Flash-Lite para clasificar");

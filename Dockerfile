@@ -16,7 +16,9 @@ COPY packages/cli/package.json packages/cli/package.json
 RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN pnpm build && sed -i 's/\r$//' scripts/docker-entrypoint.sh && chmod +x scripts/docker-entrypoint.sh
+RUN pnpm build && sed -i 's/\r$//' scripts/*.sh && chmod +x scripts/*.sh \
+    && printf '#!/bin/sh\nexec node /app/dist/pipeline/cli.js "$@"\n' > /usr/local/bin/makecash \
+    && chmod +x /usr/local/bin/makecash
 
 ENV NODE_ENV=production \
     HOME=/root

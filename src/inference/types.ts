@@ -147,6 +147,36 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
     enabled: true,
   },
   {
+    // Priced at the 2027 list price ($1.50/$7.50 per M; $0.75/$3.75 until
+    // 2026-12-31) so budget caps stay conservative across the change.
+    modelId: "gemini-3.8-flash",
+    provider: "gemini",
+    displayName: "Gemini 3.8 Flash",
+    tierMinimum: "low_compute",
+    costPer1kInput: 15,
+    costPer1kOutput: 75,
+    maxTokens: 65536,
+    contextWindow: 1048576,
+    supportsTools: true,
+    supportsVision: true,
+    parameterStyle: "max_tokens",
+    enabled: true,
+  },
+  {
+    modelId: "gemini-3.5-flash-lite",
+    provider: "gemini",
+    displayName: "Gemini 3.5 Flash-Lite",
+    tierMinimum: "critical",
+    costPer1kInput: 3,     // $0.30/M
+    costPer1kOutput: 25,   // $2.50/M
+    maxTokens: 65536,
+    contextWindow: 1048576,
+    supportsTools: true,
+    supportsVision: true,
+    parameterStyle: "max_tokens",
+    enabled: true,
+  },
+  {
     modelId: "claude-haiku-4-5-20251001",
     provider: "anthropic",
     displayName: "Claude Haiku 4.5",

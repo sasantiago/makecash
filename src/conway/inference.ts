@@ -27,11 +27,16 @@ interface InferenceClientOptions {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
+  geminiApiKey?: string;
   /** Optional registry lookup — if provided, used before name heuristics */
   getModelProvider?: (modelId: string) => string | undefined;
 }
 
-type InferenceBackend = "conway" | "openai" | "anthropic" | "ollama";
+type InferenceBackend = "conway" | "openai" | "anthropic" | "ollama" | "gemini";
+
+/** Gemini's OpenAI-compatible endpoint (full URL; differs from /v1/chat/completions). */
+export const GEMINI_CHAT_COMPLETIONS_URL =
+  "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 
 function isLoopbackHttpUrl(url: string | undefined): boolean {
   if (!url) return false;
@@ -48,7 +53,7 @@ function isLoopbackHttpUrl(url: string | undefined): boolean {
 export function createInferenceClient(
   options: InferenceClientOptions,
 ): InferenceClient {
-  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, ollamaBaseUrl, getModelProvider } = options;
+  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, ollamaBaseUrl, geminiApiKey, getModelProvider } = options;
   const httpClient = new ResilientHttpClient({
     baseTimeout: INFERENCE_TIMEOUT_MS,
     retryableStatuses: [429, 500, 502, 503, 504],
@@ -68,6 +73,7 @@ export function createInferenceClient(
       openaiApiKey,
       anthropicApiKey,
       ollamaBaseUrl,
+      geminiApiKey,
       getModelProvider,
     });
 
@@ -79,7 +85,7 @@ export function createInferenceClient(
 
     const body: Record<string, unknown> = {
       model,
-      messages: messages.map(formatMessage),
+      messages: messages.map(stripPromptCacheMarker).map(formatMessage),
       stream: false,
     };
 
@@ -117,6 +123,7 @@ export function createInferenceClient(
     const openAiLikeApiKey =
       backend === "openai" ? (openaiApiKey as string) :
       backend === "ollama" ? "ollama" :
+      backend === "gemini" ? (geminiApiKey as string) :
       apiKey;
 
     return chatViaOpenAiCompatible({
@@ -180,6 +187,7 @@ function resolveInferenceBackend(
     openaiApiKey?: string;
     anthropicApiKey?: string;
     ollamaBaseUrl?: string;
+    geminiApiKey?: string;
     getModelProvider?: (modelId: string) => string | undefined;
   },
 ): InferenceBackend {
@@ -189,12 +197,14 @@ function resolveInferenceBackend(
     if (provider === "ollama" && keys.ollamaBaseUrl) return "ollama";
     if (provider === "anthropic" && keys.anthropicApiKey) return "anthropic";
     if (provider === "openai" && keys.openaiApiKey) return "openai";
+    if (provider === "gemini" && keys.geminiApiKey) return "gemini";
     if (provider === "conway") return "conway";
     // provider unknown or key not configured — fall through to heuristics
   }
 
   // Heuristic fallback (model not in registry yet)
   if (keys.anthropicApiKey && /^claude/i.test(model)) return "anthropic";
+  if (keys.geminiApiKey && /^gemini/i.test(model)) return "gemini";
   if (keys.openaiApiKey && /^(gpt-[3-9]|gpt-4|gpt-5|o[1-9][-\s.]|o[1-9]$|chatgpt)/i.test(model)) return "openai";
   return "conway";
 
@@ -205,15 +215,18 @@ async function chatViaOpenAiCompatible(params: {
   body: Record<string, unknown>;
   apiUrl: string;
   apiKey: string;
-  backend: "conway" | "openai" | "ollama";
+  backend: "conway" | "openai" | "ollama" | "gemini";
   httpClient: ResilientHttpClient;
 }): Promise<InferenceResponse> {
-  const resp = await params.httpClient.request(`${params.apiUrl}/v1/chat/completions`, {
+  const url = params.backend === "gemini"
+    ? GEMINI_CHAT_COMPLETIONS_URL
+    : `${params.apiUrl}/v1/chat/completions`;
+  const resp = await params.httpClient.request(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization:
-        params.backend === "openai" || params.backend === "ollama"
+        params.backend === "openai" || params.backend === "ollama" || params.backend === "gemini"
           ? `Bearer ${params.apiKey}`
           : params.apiKey,
     },
@@ -236,11 +249,12 @@ async function chatViaOpenAiCompatible(params: {
   }
 
   const message = choice.message;
-  const usage: TokenUsage = {
-    promptTokens: data.usage?.prompt_tokens || 0,
-    completionTokens: data.usage?.completion_tokens || 0,
-    totalTokens: data.usage?.total_tokens || 0,
-  };
+  const promptTokens = data.usage?.prompt_tokens || 0;
+  const totalTokens = data.usage?.total_tokens || 0;
+  // Gemini bills hidden thinking tokens that completion_tokens leaves out;
+  // they only show up in total_tokens, so derive output from the total.
+  const completionTokens = Math.max(data.usage?.completion_tokens || 0, totalTokens - promptTokens);
+  const usage: TokenUsage = { promptTokens, completionTokens, totalTokens };
 
   const toolCalls: InferenceToolCall[] | undefined =
     message.tool_calls?.map((tc: any) => ({
@@ -266,6 +280,54 @@ async function chatViaOpenAiCompatible(params: {
   };
 }
 
+/**
+ * Placed in the system prompt between the stable layers (rules, genesis,
+ * skills) and the per-turn status. Anthropic requests cache everything
+ * before it; every other backend just drops the marker.
+ */
+export const PROMPT_CACHE_MARKER = "<<<PROMPT_CACHE_BREAKPOINT>>>";
+
+function stripPromptCacheMarker(msg: ChatMessage): ChatMessage {
+  if (msg.role !== "system" || !msg.content?.includes(PROMPT_CACHE_MARKER)) return msg;
+  return { ...msg, content: msg.content.replace(PROMPT_CACHE_MARKER, "").replace(/\n{3,}/g, "\n\n") };
+}
+
+const EPHEMERAL = { type: "ephemeral" } as const;
+
+/** System prompt as cacheable blocks: the stable prefix gets a breakpoint. */
+export function buildAnthropicSystem(system: string): string | Array<Record<string, unknown>> {
+  if (!system.includes(PROMPT_CACHE_MARKER)) return system;
+  const [stable, dynamic] = system.split(PROMPT_CACHE_MARKER, 2).map((s) => s.trim());
+  const blocks: Array<Record<string, unknown>> = [];
+  if (stable) blocks.push({ type: "text", text: stable, cache_control: EPHEMERAL });
+  if (dynamic) blocks.push({ type: "text", text: dynamic });
+  return blocks;
+}
+
+/**
+ * Second breakpoint on the newest message, so each turn reads the whole
+ * conversation so far from cache instead of paying for it again.
+ */
+export function withConversationBreakpoint(
+  messages: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  if (messages.length === 0) return messages;
+  const last = messages[messages.length - 1];
+  let content: Array<Record<string, unknown>>;
+  if (typeof last.content === "string") {
+    if (!last.content) return messages;
+    content = [{ type: "text", text: last.content }];
+  } else if (Array.isArray(last.content) && last.content.length > 0) {
+    content = [...(last.content as Array<Record<string, unknown>>)];
+  } else {
+    return messages;
+  }
+  const tail = content[content.length - 1];
+  if (tail.type === "text" && !tail.text) return messages; // empty text blocks can't be cached
+  content[content.length - 1] = { ...tail, cache_control: EPHEMERAL };
+  return [...messages.slice(0, -1), { ...last, content }];
+}
+
 async function chatViaAnthropic(params: {
   model: string;
   tokenLimit: number;
@@ -281,12 +343,12 @@ async function chatViaAnthropic(params: {
     max_tokens: params.tokenLimit,
     messages:
       transformed.messages.length > 0
-        ? transformed.messages
+        ? withConversationBreakpoint(transformed.messages)
         : (() => { throw new Error("Cannot send empty message array to Anthropic API"); })(),
   };
 
   if (transformed.system) {
-    body.system = transformed.system;
+    body.system = buildAnthropicSystem(transformed.system);
   }
 
   if (params.temperature !== undefined) {
@@ -344,7 +406,12 @@ async function chatViaAnthropic(params: {
     throw new Error("No completion content returned from anthropic inference");
   }
 
-  const promptTokens = data.usage?.input_tokens || 0;
+  // With prompt caching, input_tokens excludes cached tokens. Express the
+  // cached ones in full-price equivalents (writes 1.25x, reads 0.1x) so the
+  // router's cost accounting and budget caps stay accurate.
+  const cacheWrites = data.usage?.cache_creation_input_tokens || 0;
+  const cacheReads = data.usage?.cache_read_input_tokens || 0;
+  const promptTokens = Math.round((data.usage?.input_tokens || 0) + cacheWrites * 1.25 + cacheReads * 0.1);
   const completionTokens = data.usage?.output_tokens || 0;
   const usage: TokenUsage = {
     promptTokens,
