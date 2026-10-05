@@ -12,3 +12,4 @@ dist
 .automaton/state.db
 
 .env.platforms
+agent.paused

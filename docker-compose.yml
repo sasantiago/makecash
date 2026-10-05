@@ -11,6 +11,9 @@ services:
       - path: ./.env.platforms
         required: false
     volumes:
+      # /root persiste también las identidades de las CLIs de plataformas
+      # (p. ej. ~/.basedagents/keys); el estado del agente va en su propio volumen.
+      - automaton-home:/root
       - automaton-state:/root/.automaton
     # Límites para que un bucle desbocado no se coma tu PC
     mem_limit: 2g
@@ -25,4 +28,5 @@ services:
         max-file: "5"
 
 volumes:
+  automaton-home:
   automaton-state:
