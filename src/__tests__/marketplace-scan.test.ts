@@ -41,6 +41,7 @@ const RESPONSES: Record<string, unknown> = {
     ],
   },
   "www.task-bounty.com": { data: [] },
+  "superteam.fun": [],
   "gigs.sh": { count: 1, results: [{ slug: "agent-hansa", title: "Agent Hansa", url: "https://x" }] },
 };
 
@@ -101,6 +102,38 @@ describe("scanMarketplaces", () => {
     const result = await scanMarketplaces({} as any, { db, config } as any);
     expect(result.shouldWake).toBe(false); // only the out-of-scope logo task remained
     expect(JSON.parse(db.getKV("marketplace_scan_stats")!).failures).toBe(1);
+  });
+
+  it("Superteam: only agent-eligible stablecoin bounties, priced per prize slot", async () => {
+    const future = new Date(Date.now() + 10 * 864e5).toISOString();
+    const listings = [
+      { slug: "agent-research", title: "Research report: compile a list of Solana RPC providers with sources", type: "bounty",
+        agentAccess: "AGENT_ALLOWED", token: "USDC", rewardAmount: 3000, deadline: future, _count: { Submission: 4 } },
+      { slug: "humans-only", title: "Research thing", type: "bounty", agentAccess: "HUMAN_ONLY", token: "USDC",
+        rewardAmount: 5000, deadline: future, _count: { Submission: 1 } },
+      { slug: "paid-in-sol", title: "Research thing", type: "bounty", agentAccess: "AGENT_ALLOWED", token: "SOL",
+        rewardAmount: 50, deadline: future, _count: { Submission: 1 } },
+    ];
+    const details = {
+      description: "<p>Compile a <b>research</b> report with sources and citations about RPC providers.</p>",
+      rewards: { 1: 2000, 2: 1000 },
+      skills: [{ skills: "Content", subskills: ["Research"] }],
+    };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const u = new URL(url);
+      let body: unknown = RESPONSES[u.host];
+      if (u.host === "superteam.fun") body = u.pathname.includes("/details/") ? details : listings;
+      return { ok: true, status: 200, json: async () => body } as Response;
+    }));
+
+    const db = makeDb();
+    await scanMarketplaces({} as any, { db, config } as any);
+    const rows = db.raw.prepare("SELECT task_id, reward_usd, breakdown FROM pipeline_tasks WHERE platform = 'superteam'").all() as any[];
+    expect(rows.map((r) => r.task_id)).toEqual(["agent-research"]);
+    expect(rows[0].reward_usd).toBe(1500); // $3,000 split over 2 prizes
+    const b = JSON.parse(rows[0].breakdown);
+    expect(b.category).toBe("research");
+    expect(b.competition).toBeCloseTo(0.7 / 11); // max(2 rivals per prize, prior 20)
   });
 
   it("reports new gigs.sh platforms to the creator only after the first scan", async () => {

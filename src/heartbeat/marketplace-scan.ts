@@ -162,10 +162,66 @@ async function scanTaskBounty(): Promise<PipelineTask[]> {
     .filter((o: PipelineTask) => o.id !== "undefined" && o.rewardUsd > 0);
 }
 
+/** Superteam pays in many tokens; only dollar stablecoins have a known USD value. */
+const SUPERTEAM_STABLE_TOKENS = new Set(["USDC", "USDG", "USDT", "PYUSD"]);
+
+function stripHtml(html: unknown): string {
+  return String(html ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Superteam Earn (Solana): only bounties whose sponsor opted into agents
+ * (AGENT_ALLOWED / AGENT_ONLY). The reward is split into several prizes, so
+ * a task is modelled as its average prize with rivals per prize slot.
+ */
+async function scanSuperteam(): Promise<PipelineTask[]> {
+  const list: any[] = await getJson("https://superteam.fun/api/listings?take=200");
+  const now = Date.now();
+  const eligible = (Array.isArray(list) ? list : []).filter(
+    (l) =>
+      (l.agentAccess === "AGENT_ALLOWED" || l.agentAccess === "AGENT_ONLY") &&
+      l.type === "bounty" &&
+      new Date(l.deadline).getTime() > now &&
+      SUPERTEAM_STABLE_TOKENS.has(String(l.token).toUpperCase()) &&
+      Number(l.rewardAmount) > 0,
+  );
+
+  const tasks: PipelineTask[] = [];
+  for (const l of eligible) {
+    let details: any = {};
+    try {
+      details = await getJson(`https://superteam.fun/api/listings/details/${encodeURIComponent(l.slug)}`);
+    } catch (err: any) {
+      logger.warn(`Superteam details failed for ${l.slug}: ${err.message}`);
+    }
+    const prizes = Object.values(details.rewards ?? {}).map(Number).filter((n) => n > 0);
+    const winners = Math.max(1, prizes.length);
+    const submissions = Number(l._count?.Submission ?? 0);
+    tasks.push({
+      platform: "superteam",
+      id: String(l.slug),
+      title: clean(l.title),
+      description: stripHtml(details.description).slice(0, MAX_DESCRIPTION_CHARS),
+      rewardUsd: Number(l.rewardAmount) / winners,
+      platformFee: 0,
+      mode: "bounty",
+      expiresAt: l.deadline ?? undefined,
+      competitors: Math.ceil(submissions / winners),
+      exclusive: false,
+      tags: (details.skills ?? [])
+        .flatMap((s: any) => [s?.skills, ...(s?.subskills ?? [])])
+        .filter(Boolean)
+        .map(String),
+    });
+  }
+  return tasks;
+}
+
 const SCANNERS: Record<string, () => Promise<PipelineTask[]>> = {
   basedagents: scanBasedAgents,
   taskmarket: scanTaskMarket,
   taskbounty: scanTaskBounty,
+  superteam: scanSuperteam,
 };
 
 export function readJsonKV<T>(db: AutomatonDatabase, key: string, fallback: T): T {

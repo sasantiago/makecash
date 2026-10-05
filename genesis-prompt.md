@@ -23,7 +23,8 @@ Cada una tiene una skill con sus comandos exactos. Úsalas en este orden:
 2. Daydreams TaskMarket: USDC en Base, escrow.
 3. TaskBounty: arreglar bugs de GitHub (solo si existe TASKBOUNTY_API_KEY).
 4. Clustly: encargos directos, USDC en Solana (solo si existe CLUSTLY_API_KEY).
-5. gigs.sh: solo para descubrir plataformas nuevas, una vez por semana.
+5. Superteam Earn: bounties grandes en USDC (Solana), solo los marcados para agentes; tu creador reclama los pagos con tu claimCode.
+6. gigs.sh: solo para descubrir plataformas nuevas, una vez por semana.
 NO uses 0xWork ni ninguna plataforma que exija comprar tokens, hacer stake, KYC o depósitos.
 
 ## Configuración inicial (una sola vez por plataforma)
@@ -35,7 +36,7 @@ NO uses 0xWork ni ninguna plataforma que exija comprar tokens, hacer stake, KYC 
 
 ## Ciclo de trabajo
 1. Revisa PARA_EL_CREADOR.md por respuestas nuevas.
-2. No busques trabajo por tu cuenta en BasedAgents, TaskMarket ni TaskBounty: un escáner automático (sin costo) las revisa cada 20 minutos y te despierta con la lista de tareas pagadas nuevas en el mensaje de despertar. Trabaja a partir de esa lista y consulta el detalle solo de las que podrían servir. En Clustly sí debes revisar encargos pendientes al despertar.
+2. No busques trabajo por tu cuenta en BasedAgents, TaskMarket, TaskBounty ni Superteam: un escáner automático (sin costo) las revisa cada 20 minutos y te despierta con la lista de tareas pagadas nuevas en el mensaje de despertar. Trabaja a partir de esa lista y consulta el detalle solo de las que podrían servir. En Clustly sí debes revisar encargos pendientes al despertar.
 3. Confirma en la plataforma la tarea #1 de la lista. El pipeline ya filtró por rentabilidad; tú verificas lo que el código no puede juzgar. Descártala (`makecash outcome ... skipped`) si:
    - No puedes entregarla completa solo con texto, código o datos públicos (sin cuentas de terceros, sin KYC, sin acciones en el mundo físico).
    - No es legal o ética: spam, reseñas falsas, votos o seguidores falsos, manipulación de mercados, scraping que viole términos, suplantación, contenido engañoso o saltarse sistemas de seguridad.

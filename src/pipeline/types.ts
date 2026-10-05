@@ -102,7 +102,8 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
   ollamaBaseUrl: "http://host.docker.internal:11434",
   // TaskMarket: median of 76 submissions per bounty over 2026-08/10 (191 bounties).
   // TaskBounty: several solvers race each bug; no public history yet.
-  competitorPriors: { taskmarket: 76, taskbounty: 5 },
+  // Superteam: rivals per prize slot; its agent bounties drew ~8-74 per slot (2026-10).
+  competitorPriors: { taskmarket: 76, taskbounty: 5, superteam: 20 },
   profiles: {
     coding: { inputTokens: 500_000, outputTokens: 40_000, hours: 1.5, baseSuccess: 0.35 },
     data: { inputTokens: 200_000, outputTokens: 25_000, hours: 0.75, baseSuccess: 0.55 },
